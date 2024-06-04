@@ -5,9 +5,9 @@
 
 using namespace std;
 
-double lr = 1; // defining  the learnng rate
+double lr = 1; // defining the learning rate
 double sigmoid(double x);
-vector<double> training_data(int cyc);
+vector<int> training_data(int cyc);
 double mse_calc(double actual, double pred);
 vector<vector<double>> backward_pass(double err, double Z, vector<double> w2,
                                      vector<double> Y);
@@ -19,8 +19,8 @@ void printv(vector<double> v) {
 }
 void printvv(vector<vector<double>> vv) {
   for (int i = 0; i < vv.size(); i++)
-    // printv(vv[i]);
-    cout << endl;
+    printv(vv[i]);
+  cout << endl;
 }
 
 class input_l {
@@ -38,19 +38,8 @@ public:
   void set_value(double val) { value = val; }
   void GrD_update(vector<double> dw) {
     for (int i = 0; i < weights.size(); i++) {
-      weights[i] -= (lr * dw[i]);
+      weights[i] = weights[i] + (lr * dw[i] * value);
     }
-  }
-  void backward_pass(double actl, double pred, double w, double h,
-                     vector<double> X) {
-    double dldz3 = (actl - pred) * pred * (1 - pred);
-    double dldz = dldz3 * w * h * (1 - h);
-    vector<double> dw;
-    for (int i = 0; i < X.size(); i++) {
-      dw.push_back(dldz * X[i]);
-    }
-    // printv(dw);
-    GrD_update(dw);
   }
 
   void describe() {
@@ -70,6 +59,7 @@ private:
 
 public:
   void forward_prop(vector<double> w, vector<double> X) {
+    value = 0; // Reset value before accumulation
     try {
       if (w.size() != X.size())
         throw(3);
@@ -83,14 +73,13 @@ public:
     }
     act_val = sigmoid(value);
   }
-  void GrD_update(vector<double> dw) {
+  void GrD_update(double dw) {
     for (int i = 0; i < weights.size(); i++) {
-      weights[i] -= (lr * dw[i]);
+      weights[i] = weights[i] + (lr * dw * act_val);
     }
   }
-  void backward_pass(double actl, double pred) {
-    double dldz3 = -(actl - pred) * pred * (1 - pred);
-    GrD_update({dldz3 * act_val});
+  double backward_pass(double d5) {
+    return act_val * (1 - act_val) * weights[0] * d5;
   }
   hidden_l(double val, vector<double> w) {
     value = val;
@@ -116,6 +105,7 @@ private:
 
 public:
   void forward_prop(vector<double> w, vector<double> Y) {
+    value = 0; // Reset value before accumulation
     try {
       if (w.size() != Y.size())
         throw(3);
@@ -131,6 +121,10 @@ public:
   }
 
   double final_value() { return act_val; }
+
+  double backward_pass(double actl) {
+    return (actl - act_val) * act_val * (1 - act_val);
+  }
 
   output_l(double val) {
     value = val;
@@ -156,10 +150,10 @@ int main(int argc, char *argv[]) {
 
   for (int cyc = 0; cyc < cycles; cyc++) {
     cout << "cycle:" << cyc + 1 << endl;
-    vector<double> data = training_data(cyc);
+    vector<int> data = training_data(cyc);
     for (int i = 0; i < in_layer.size(); i++) { // setting up the input layer
       in_layer[i].set_value(
-          (float)data[i]); // feeding the layer with trining data
+          (double)data[i]); // feeding the layer with training data
     }
     for (int i = 0; i < hid_layer.size(); i++) { // setting up the hidden layer
       vector<double> w1, X;
@@ -193,7 +187,7 @@ int main(int argc, char *argv[]) {
     double Zd = out_layer[0].final_value();
     double L = mse_calc(Zd, Z); // this helps calculate the loss commented
                                 // since not reqired right now
-    vector<double> w2, H, X;
+    vector<double> w2, H, X, D;
 
     for (int i = 0; i < hid_layer.size(); i++) {
       H.push_back(hid_layer[i].get_act_val());
@@ -201,12 +195,20 @@ int main(int argc, char *argv[]) {
     }
     X = {(double)data[0], (double)data[1]};
 
-    for (int i = 0; i < in_layer.size(); i++) {
-      in_layer[i].backward_pass(Z, Zd, w2[i], H[i], X);
+    for (int i = 0; i < out_layer.size(); i++) {
+      D.push_back(out_layer[i].backward_pass(Z));
     }
     for (int i = 0; i < hid_layer.size(); i++) {
-      hid_layer[i].backward_pass(Z, Zd);
+      D.push_back(hid_layer[i].backward_pass(D[0]));
     }
+    // now D has values 𝛿5, 𝛿3, 𝛿4 in indexes 0,1,2
+    for (int i = 0; i < hid_layer.size(); i++) {
+      hid_layer[i].GrD_update(D[0]);
+    }
+    for (int i = 0; i < in_layer.size(); i++) {
+      in_layer[i].GrD_update({D[1], D[2]});
+    }
+
     for (int i = 0; i < in_layer.size(); i++) {
       in_layer[i].describe();
     }
@@ -228,7 +230,7 @@ double sigmoid(double x) { return 1.0 / (1.0 + exp(-x)); }
 vector<input_l> init_input(int cnt) {
   vector<input_l> lay;
   for (int i = 0; i < cnt; i++) {
-    vector weight = {0.2, 0.3};
+    vector<double> weight = {0.2, 0.3};
     input_l inp(0.0, weight);
     lay.push_back(inp);
   }
@@ -238,7 +240,7 @@ vector<input_l> init_input(int cnt) {
 vector<hidden_l> init_hidden(int cnt) {
   vector<hidden_l> lay;
   for (int i = 0; i < cnt; i++) {
-    vector weight = {0.3 + i * (0.6)};
+    vector<double> weight = {0.3 + i * 0.6};
     hidden_l hid(0.0, weight);
     lay.push_back(hid);
   }
@@ -254,10 +256,10 @@ vector<output_l> init_output(int cnt) {
   return lay;
 }
 
-vector<double> training_data(int cyc) {
-  // vector<vector<int>> data = {{0, 0, 0}, {1, 0, 1}, {0, 1, 1}, {1, 1, 0}};
-  // return data[(cyc + 1) % 4];
-  return {0.35, 0.7, 0.5};
+vector<int> training_data(int cyc) {
+  vector<vector<int>> data = {{0, 0, 0}, {1, 0, 1}, {0, 1, 1}, {1, 1, 0}};
+  return data[cyc % 4];
+  // return {0.35, 0.7, 0.5};
 }
 
 double mse_calc(double actl, double pred) { // for calculating loss
