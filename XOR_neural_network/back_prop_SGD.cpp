@@ -4,7 +4,7 @@
 
 using namespace std;
 
-double lr = 2; // defining the learning rate
+double lr = 1; // defining the learning rate
 double sigmoid(double x);
 vector<double> training_data(int cyc);
 double mse_calc(double actual, double pred);
@@ -37,7 +37,7 @@ public:
   void set_value(double val) { value = val; }
   void GrD_update(vector<double> dw) {
     for (int i = 0; i < weights.size(); i++) {
-      weights[i] = weights[i] + (lr * dw[i]); // * value);
+      weights[i] = weights[i] + (lr * dw[i] * value);
     }
   }
 
@@ -74,10 +74,12 @@ public:
   }
   void GrD_update(double dw) {
     for (int i = 0; i < weights.size(); i++) {
-      weights[i] = weights[i] + (lr * dw); //* act_val);
+      weights[i] = weights[i] + (lr * dw * act_val);
     }
   }
-  double backward_pass(double d5) { return act_val * (1 - act_val) * d5; }
+  double backward_pass(double d5) {
+    return act_val * (1 - act_val) * weights[0] * d5;
+  }
   hidden_l(double val, vector<double> w) {
     value = val;
     act_val = sigmoid(val);
@@ -141,6 +143,7 @@ int main(int argc, char *argv[]) {
   vector<hidden_l> hid_layer = init_hidden(2);
   vector<output_l> out_layer = init_output(1);
 
+  int label = 0;
   int cycles;
   cout << "how many cycles of training to run?" << endl;
   cin >> cycles;
@@ -179,11 +182,11 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < out_layer.size(); i++) {
       out_layer[i].describe();
     }
-
-    // Backward Propagation
+    ////////////////////////////////////////////////////////////
     double Z = data[2];
     double Zd = out_layer[0].final_value();
-    double L = mse_calc(Zd, Z); // this helps calculate the loss
+    double L = mse_calc(Zd, Z); // this helps calculate the loss commented
+                                // since not reqired right now
     vector<double> w2, H, X, D;
 
     for (int i = 0; i < hid_layer.size(); i++) {
@@ -198,7 +201,7 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < hid_layer.size(); i++) {
       D.push_back(hid_layer[i].backward_pass(D[0]));
     }
-    // now D has values δ5, δ3, δ4 in indexes 0,1,2
+    // now D has values 𝛿5, 𝛿3, 𝛿4 in indexes 0,1,2
     for (int i = 0; i < hid_layer.size(); i++) {
       hid_layer[i].GrD_update(D[0]);
     }
@@ -215,6 +218,8 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < out_layer.size(); i++) {
       out_layer[i].describe();
     }
+    if ((Z == 0 && Zd < 0.5) || (Z == 1 && Zd > 0.5))
+      label = (label + 1) % 4;
   }
 
   return 0;
